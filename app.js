@@ -5,7 +5,9 @@ const bodyparser = require("body-parser");
 const ejs = require("ejs");
 const app = express();
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
+
 
 app.use(express.static("public"));
 app.set("view engine", "ejs");
@@ -13,7 +15,6 @@ app.use(bodyparser.urlencoded({
   extended: true
 }));
 
-console.log(process.env.API_KEY);
 
 mongoose.connect("mongodb://localhost:27017/userDB",{useNewUrlParser: true, useUnifiedTopology: true});
 
@@ -22,8 +23,6 @@ const userSchema = new mongoose.Schema( {
   password: String
 });
 
-
-userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields: ["password"]});
 
 const User = new mongoose.model("user", userSchema);
 
@@ -38,18 +37,26 @@ app.get("/register", function(req,res){
   res.render("register");
 });
 
+app.get("/logout", function(req,res){
+  res.render("home");
+})
+
 app.post("/register", function(req,res){
-  const newUser = new User({
-    email: req.body.username,
-    password: req.body.password
+
+  bcrypt.hash(req.body.password, saltRounds, function(err, hash){
+    const newUser = new User({
+      email: req.body.username,
+      password: hash
+    });
+  newUser.save(function(err){
+    if(err){
+      console.log(err);
+    }else{
+      res.render("secrets");
+    }
   });
-newUser.save(function(err){
-  if(err){
-    console.log(err);
-  }else{
-    res.render("secrets");
-  }
 });
+
 });
 
 app.post("/login", function(req,res){
@@ -61,14 +68,18 @@ app.post("/login", function(req,res){
       console.log(err);
     }else{
       if(foundUser){
-        if (foundUser.password === password){
-          res.render("secrets");
-
+        bcrypt.compare(password, foundUser.password, function(err, result){
+          if(result === true){
+            res.render("secrets");
+          }else{
+            console.log("Username or password is incorrect");
+          }
+        });
         }
       }
-    }
+    });
   });
-});
+
 
 app.listen(3000, function(){
     console.log("server started at port 3000");
